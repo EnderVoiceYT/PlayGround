@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#050707" />
+  <title>BLACKMOOR — Darkest Hour</title>
+  <meta name="description" content="A survival horror descent into St. Aldric Hospital. Keep the light alive." />
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23060808'/%3E%3Cpath d='M32 8 54 20v24L32 56 10 44V20Z' fill='none' stroke='%23a8342a' stroke-width='2'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%23e7d8b6'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene" aria-label="Blackmoor gameplay scene"></canvas>
+
+    <div id="grade"></div>
+    <div id="vignette"></div>
+    <div id="grain"></div>
+    <div id="scanlines"></div>
+    <div id="damage-flash"></div>
+    <div id="fade"></div>
+
+    <!-- ===================== HUD ===================== -->
+    <div id="hud" class="hidden" aria-live="polite">
+      <div id="objective-panel" class="glass-panel">
+        <div class="panel-kicker"><span class="kicker-dot"></span> CURRENT DIRECTIVE</div>
+        <div id="objective-title">Find a way out</div>
+        <div id="objective-sub">St. Aldric Hospital · Sublevel 3</div>
+        <div id="objective-distance" class="objective-distance"></div>
+        <div id="fuse-track" class="fuse-track">
+          <span class="fuse-chip" data-fuse="ward">WARD</span>
+          <span class="fuse-chip" data-fuse="cold">COLD</span>
+          <span class="fuse-chip" data-fuse="pump">PUMP</span>
+        </div>
+      </div>
+
+      <div id="map-panel" class="glass-panel">
+        <div class="map-head">
+          <span id="room-name">Main Lobby</span>
+          <span id="room-sub">Quarantine Ward</span>
+        </div>
+        <canvas id="minimap" width="380" height="300"></canvas>
+        <div class="map-legend">
+          <span><i class="lg-you"></i>YOU</span>
+          <span><i class="lg-goal"></i>GOAL</span>
+          <span><i class="lg-save"></i>RECORDER</span>
+        </div>
+      </div>
+
+      <div id="threat" class="hidden">
+        <span class="threat-eye">◉</span>
+        <span id="threat-text">SOMETHING IS NEAR</span>
+      </div>
+
+      <div id="crosshair" class="hidden">
+        <span class="ch-t"></span><span class="ch-b"></span><span class="ch-l"></span><span class="ch-r"></span>
+        <span class="ch-dot"></span>
+        <span class="ch-hit"></span>
+      </div>
+
+      <div id="vitals" class="hud-block">
+        <div class="vital-row">
+          <span class="vital-icon">♥</span>
+          <div class="bar-wrap health-wrap">
+            <div id="health-fill" class="bar-fill"></div>
+            <span id="health-shine" class="bar-shine"></span>
+          </div>
+          <span id="health-text" class="vital-num">100</span>
+        </div>
+        <div class="vital-row stamina-row" id="stamina-row">
+          <span class="vital-icon small">»</span>
+          <div class="bar-wrap stamina-wrap"><div id="stamina-fill" class="bar-fill"></div></div>
+        </div>
+        <div class="vital-row">
+          <span class="vital-icon" id="battery-icon">▮</span>
+          <div class="bar-wrap battery-wrap">
+            <div id="battery-fill" class="bar-fill"></div>
+            <span id="battery-shine" class="bar-shine"></span>
+          </div>
+          <span id="battery-text" class="vital-num">100%</span>
+        </div>
+        <div id="flash-state" class="flash-state">FLASHLIGHT · ON</div>
+
+        <div id="quick-items" class="quick-items">
+          <button class="quick-btn" data-quick="battery" title="Install battery (B)">
+            <span class="q-icon">▮</span><span class="q-count" id="q-battery">0</span><span class="q-key">B</span>
+          </button>
+          <button class="quick-btn" data-quick="medkit" title="Use medkit (H)">
+            <span class="q-icon">✚</span><span class="q-count" id="q-medkit">0</span><span class="q-key">H</span>
+          </button>
+          <button class="quick-btn" data-quick="flare" title="Throw flare (G)">
+            <span class="q-icon">✦</span><span class="q-count" id="q-flare">0</span><span class="q-key">G</span>
+          </button>
+          <button class="quick-btn" data-quick="inventory" title="Pack (Tab)">
+            <span class="q-icon">▤</span><span class="q-key">TAB</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="weapon" class="hud-block">
+        <div class="weapon-name">SERVICE PISTOL · 9MM</div>
+        <div class="ammo-row">
+          <span id="ammo-mag">12</span><span class="ammo-sep">/</span><span id="ammo-reserve">24</span>
+        </div>
+        <div id="reload-hint" class="reload-hint">R · RELOAD</div>
+      </div>
+
+      <div id="interact" class="interact hidden">
+        <span class="interact-key" id="interact-key">E</span>
+        <span id="interact-label">Open door</span>
+      </div>
+
+      <div id="messages" class="messages"></div>
+      <div id="banner" class="banner hidden">
+        <div id="banner-kicker" class="banner-kicker"></div>
+        <div id="banner-title" class="banner-title"></div>
+        <div id="banner-sub" class="banner-sub"></div>
+      </div>
+
+      <div id="danger-line" class="danger-line"></div>
+
+      <!-- Touch controls -->
+      <div id="touch-ui" class="touch-ui hidden">
+        <div id="move-stick" class="stick">
+          <div class="stick-ring"></div>
+          <div id="move-knob" class="stick-knob"></div>
+          <span class="stick-label">MOVE</span>
+        </div>
+        <div id="aim-stick" class="stick">
+          <div class="stick-ring"></div>
+          <div id="aim-knob" class="stick-knob aim-knob"></div>
+          <span class="stick-label">AIM</span>
+        </div>
+        <div id="touch-buttons">
+          <button id="tb-inventory" class="touch-btn small-btn" aria-label="Inventory">▤</button>
+          <button id="tb-reload" class="touch-btn small-btn" aria-label="Reload">↻</button>
+          <button id="tb-flare" class="touch-btn small-btn" aria-label="Flare">✦</button>
+          <button id="tb-flash" class="touch-btn small-btn" aria-label="Flashlight">▮</button>
+          <button id="tb-interact" class="touch-btn interact-btn" aria-label="Interact">E</button>
+          <button id="tb-fire" class="touch-btn fire-btn" aria-label="Fire">FIRE</button>
+        </div>
+        <button id="tb-pause" class="touch-pause" aria-label="Pause">II</button>
+      </div>
+    </div>
+
+    <!-- ===================== LOADING ===================== -->
+    <div id="loading" class="screen loading-screen active">
+      <div class="loading-inner">
+        <div class="loading-mark">B</div>
+        <div class="loading-title">BLACKMOOR</div>
+        <div class="loading-sub">ST. ALDRIC HOSPITAL · SUBLEVEL 3</div>
+        <div class="loading-bar"><div id="loading-fill"></div></div>
+        <div id="loading-status" class="loading-status">DESCENDING…</div>
+        <div class="loading-warning">Contains flashing lights, blood, and sustained horror themes.</div>
+      </div>
+    </div>
+
+    <!-- ===================== TITLE ===================== -->
+    <div id="title-screen" class="screen title-screen">
+      <div class="title-shade"></div>
+      <div class="title-content">
+        <div class="title-eyebrow">AN ORIGINAL SURVIVAL HORROR</div>
+        <h1 class="game-title" data-text="BLACKMOOR">BLACKMOOR</h1>
+        <div class="game-subtitle">DARKEST HOUR</div>
+        <div class="title-rule"><span></span><i>✦</i><span></span></div>
+        <p class="title-blurb">
+          The evacuation stopped six hours ago. The lights went out one minute later.
+          Somewhere below St. Aldric Hospital, the generator is still holding a door shut.
+        </p>
+        <div class="title-actions">
+          <button id="btn-begin" class="btn btn-primary">BEGIN DESCENT</button>
+          <button id="btn-continue" class="btn btn-ghost hidden">CONTINUE LAST RECORD</button>
+          <button id="btn-help" class="btn btn-text">CONTROLS &amp; SURVIVAL</button>
+        </div>
+        <div class="title-meta">
+          <span>HEADPHONES RECOMMENDED</span>
+          <span class="meta-sep">/</span>
+          <span>MOUSE + KEYBOARD · TOUCH</span>
+          <span class="meta-sep">/</span>
+          <span id="title-save-info">NO RECORDED CHECKPOINT</span>
+        </div>
+      </div>
+      <div class="title-footer">
+        <span>BLACKMOOR · CASE 0-19</span>
+        <span>ST. ALDRIC HOSPITAL · 03:12</span>
+      </div>
+    </div>
+
+    <!-- ===================== HELP ===================== -->
+    <div id="help-screen" class="screen modal-screen">
+      <div class="modal wide">
+        <div class="modal-kicker">FIELD MANUAL · SUBLEVEL 3</div>
+        <h2 class="modal-title">HOW TO SURVIVE</h2>
+        <div class="help-grid">
+          <div class="help-card">
+            <h3>THE LIGHT</h3>
+            <p>Your flashlight is a weapon. The Hollow recoil from it and burn in its beam. Moths are drawn to it and drink the battery. The Gaunt does not care.</p>
+            <p class="hint">F toggle · B install cell · Batteries are finite.</p>
+          </div>
+          <div class="help-card">
+            <h3>THE DARK</h3>
+            <p>Enemies see farther when you are lit, and hear you when you run. Switch the beam off to hide, but the dark is never empty.</p>
+            <p class="hint">Shift sprint · footsteps and gunfire carry.</p>
+          </div>
+          <div class="help-card">
+            <h3>THE GRID</h3>
+            <p>Recover three ceramic fuses, restore the generator, and take the service elevator. Power wakes the whole building with you.</p>
+            <p class="hint">E interact · quest markers on the minimap.</p>
+          </div>
+          <div class="help-card">
+            <h3>THE RECORDERS</h3>
+            <p>Three emergency recorders hold two charges each. Save sparingly. Death returns you to the last recorded checkpoint.</p>
+            <p class="hint">Tab pack · Esc pause · Notes can be reread.</p>
+          </div>
+        </div>
+        <div class="key-grid">
+          <div><kbd>W A S D</kbd><span>Move</span></div>
+          <div><kbd>MOUSE</kbd><span>Aim</span></div>
+          <div><kbd>LMB</kbd><span>Fire</span></div>
+          <div><kbd>R</kbd><span>Reload</span></div>
+          <div><kbd>F</kbd><span>Flashlight</span></div>
+          <div><kbd>E</kbd><span>Interact</span></div>
+          <div><kbd>G</kbd><span>Flare</span></div>
+          <div><kbd>H</kbd><span>Medkit</span></div>
+          <div><kbd>B</kbd><span>Battery</span></div>
+          <div><kbd>SHIFT</kbd><span>Sprint</span></div>
+          <div><kbd>TAB / I</kbd><span>Pack</span></div>
+          <div><kbd>ESC</kbd><span>Pause</span></div>
+        </div>
+        <div class="modal-actions">
+          <button id="btn-help-close" class="btn btn-primary">BACK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PAUSE ===================== -->
+    <div id="pause-screen" class="screen modal-screen">
+      <div class="modal">
+        <div class="modal-kicker">SYSTEM SUSPENDED</div>
+        <h2 class="modal-title">PAUSED</h2>
+        <div class="pause-stats" id="pause-stats"></div>
+        <div class="menu-list">
+          <button id="btn-resume" class="btn btn-primary">RESUME</button>
+          <button id="btn-pause-inventory" class="btn btn-ghost">PACK &amp; NOTES</button>
+          <button id="btn-pause-help" class="btn btn-ghost">FIELD MANUAL</button>
+          <button id="btn-restart" class="btn btn-ghost">LOAD LAST RECORD</button>
+          <button id="btn-quit" class="btn btn-text">QUIT TO TITLE</button>
+        </div>
+        <div class="settings">
+          <div class="setting-row">
+            <label for="volume">MASTER VOLUME</label>
+            <input id="volume" type="range" min="0" max="1" step="0.02" value="0.8" />
+            <button id="btn-mute" class="mini-btn">SOUND ON</button>
+          </div>
+          <div class="setting-row toggles">
+            <label class="switch"><input id="set-grain" type="checkbox" checked /><span></span>FILM GRAIN</label>
+            <label class="switch"><input id="set-shake" type="checkbox" checked /><span></span>CAMERA SHAKE</label>
+            <label class="switch"><input id="set-touch" type="checkbox" /><span></span>TOUCH CONTROLS</label>
+          </div>
+        </div>
+        <div class="modal-note">A recorder is not a rescue. Nobody is coming.</div>
+      </div>
+    </div>
+
+    <!-- ===================== INVENTORY ===================== -->
+    <div id="inventory-screen" class="screen modal-screen">
+      <div class="modal wide inventory-modal">
+        <div class="modal-kicker">FIELD PACK · ELIAS ROURKE</div>
+        <h2 class="modal-title">INVENTORY</h2>
+        <div class="inv-layout">
+          <div class="inv-main">
+            <div id="inv-grid" class="inv-grid"></div>
+          </div>
+          <aside class="inv-side">
+            <div class="inv-side-title">RECOVERED RECORDS</div>
+            <div id="inv-notes" class="inv-notes"></div>
+            <div id="inv-objective" class="inv-objective"></div>
+          </aside>
+        </div>
+        <div class="modal-actions">
+          <button id="btn-inv-close" class="btn btn-primary">RESUME</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== NOTE ===================== -->
+    <div id="note-screen" class="screen note-screen">
+      <div class="note-paper">
+        <div class="note-stamp">ST. ALDRIC HOSPITAL · SUBLEVEL 3</div>
+        <div id="note-title" class="note-title">NOTE</div>
+        <div id="note-meta" class="note-meta"></div>
+        <div id="note-body" class="note-body"></div>
+        <div class="note-footer">
+          <span id="note-index">RECOVERED DOCUMENT</span>
+          <button id="btn-note-close" class="note-close">CLOSE [E]</button>
+        </div>
+        <div class="note-blood"></div>
+      </div>
+    </div>
+
+    <!-- ===================== DEATH ===================== -->
+    <div id="death-screen" class="screen death-screen">
+      <div class="death-shade"></div>
+      <div class="death-content">
+        <div class="death-kicker">SUBJECT LOST</div>
+        <h2 class="death-title">THE DARK<br />TAKES YOU</h2>
+        <p class="death-line">Your light goes out before your eyes do.</p>
+        <div id="death-stats" class="end-stats"></div>
+        <div class="menu-list horizontal">
+          <button id="btn-load" class="btn btn-primary">LOAD LAST RECORD</button>
+          <button id="btn-new-run" class="btn btn-ghost">BEGIN AGAIN</button>
+        </div>
+        <div class="death-quote">“It does not hate the light. It remembers what it was like to be warm.”</div>
+      </div>
+    </div>
+
+    <!-- ===================== VICTORY ===================== -->
+    <div id="victory-screen" class="screen victory-screen">
+      <div class="victory-shade"></div>
+      <div class="victory-content">
+        <div class="victory-kicker">SERVICE ELEVATOR · SURFACE</div>
+        <h2 class="victory-title">DAYLIGHT</h2>
+        <p class="victory-line">
+          The doors open onto a grey morning. Behind you, the building is still breathing.
+          You do not look back.
+        </p>
+        <div id="victory-stats" class="end-stats"></div>
+        <div class="victory-epilogue">
+          <span>ST. ALDRIC HOSPITAL REMAINS SEALED.</span>
+          <span>THE GRID WILL HOLD UNTIL SOMEONE ELSE GOES DOWN.</span>
+        </div>
+        <div class="menu-list horizontal">
+          <button id="btn-replay" class="btn btn-primary">DESCEND AGAIN</button>
+          <button id="btn-victory-title" class="btn btn-ghost">TITLE SCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="rotate-warning">
+      <div>
+        <div class="rotate-icon">▭</div>
+        <strong>ROTATE DEVICE</strong>
+        <p>Blackmoor is best played in landscape.</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.js",
+        "three/addons/": "./vendor/addons/"
+      }
+    }
+  </script>
+  <script type="module" src="./src/game.js"></script>
+</body>
+</html>
